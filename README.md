@@ -1,13 +1,3 @@
-╔══════════════════════════════════════════════════════════════════════╗
-║    _____ _   _ ____      ______ _   _ _   _ __  __                   ║
-║   / ____| | | |  _ \    |  ____| \ | | | | |  \/  |                  ║
-║  | (___ | | | | |_) |   | |__  |  \| | | | | \  / |                  ║
-║   \___ \| | | |  _ <    |  __| | . ` | | | | |\/| |                  ║
-║   ____) | |_| | |_) |   | |____| |\  | |_| | |  | |                  ║
-║  |_____/ \___/|____/    |______|_| \_|\___/|_|  |_|                  ║
-║                       By github.com/navaf-pt                         ║
-╚══════════════════════════════════════════════════════════════════════╝
-
 # ReconSub
 
 A small Bash tool for collecting passive subdomain results from locally installed tools and public, no-key sources. It validates that hostnames belong to the requested target, normalizes them, and writes one deduplicated text file.
