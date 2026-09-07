@@ -37,22 +37,30 @@ log() {
     return
   fi
   case $message in
-    '[✓] Unique subdomains:'*) printf '\033[1;35m%s\033[0m\n' "$message" >&2 ;;
-    '[✓] Results saved:'*)     printf '\033[1;34m%s\033[0m\n' "$message" >&2 ;;
-    '    '*)                   printf '\033[1;34m%s\033[0m\n' "$message" >&2 ;;
+    '[✓] Unique subdomains:'*) printf '\033[1;33m%s\033[0m\n' "$message" >&2 ;;
+    '[✓] Results saved:'*)     printf '\033[1;32m%s\033[0m\n' "$message" >&2 ;;
+    '    '*)                   printf '\033[1;32m%s\033[0m\n' "$message" >&2 ;;
     '[✓]'*)                    printf '\033[1;32m%s\033[0m\n' "$message" >&2 ;;
-    '[!]'*) printf '\033[1;33m%s\033[0m\n' "$message" >&2 ;;
-    '[+]'*) printf '\033[1;36m%s\033[0m\n' "$message" >&2 ;;
-    *)      printf '%s\n' "$message" >&2 ;;
+    '[!]'*)                    printf '\033[1;33m%s\033[0m\n' "$message" >&2 ;;
+    '[+]'*)                    printf '\033[1;36m%s\033[0m\n' "$message" >&2 ;;
+    *)                         printf '%s\n' "$message" >&2 ;;
   esac
 }
 banner() {
   (( QUIET )) && return
-  if [[ -t 2 ]]; then
-    printf '\033[1;36m╔══════════════════════════════════════════════╗\n║                  SUBS-ENUM                   ║\n╚══════════════════════════════════════════════╝\033[0m\n' >&2
-  else
-    printf '╔══════════════════════════════════════════════╗\n║                  SUBS-ENUM                   ║\n╚══════════════════════════════════════════════╝\n' >&2
-  fi
+  [[ -t 2 ]] && printf '\033[1;32m' >&2
+  cat >&2 <<'EOF'
+╔══════════════════════════════════════════════════════════════════════╗
+║    _____ _   _ ____      ______ _   _ _   _ __  __                   ║
+║   / ____| | | |  _ \    |  ____| \ | | | | |  \/  |                  ║
+║  | (___ | | | | |_) |   | |__  |  \| | | | | \  / |                  ║
+║   \___ \| | | |  _ <    |  __| | . ` | | | | |\/| |                  ║
+║   ____) | |_| | |_) |   | |____| |\  | |_| | |  | |                  ║
+║  |_____/ \___/|____/    |______|_| \_|\___/|_|  |_|                  ║
+║                       By github.com/nazz211                          ║
+╚══════════════════════════════════════════════════════════════════════╝
+EOF
+  [[ -t 2 ]] && printf '\033[0m' >&2
 }
 cleanup() { local d; for d in "${TMPDIRS[@]:-}"; do [[ -n $d ]] && rm -rf -- "$d"; done; }
 trap cleanup EXIT
@@ -64,7 +72,7 @@ valid_target() { [[ $1 =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9](
 
 check_tools() {
   local tool
-  for tool in subfinder amass assetfinder findomain gau waybackurls waymore; do
+  for tool in subfinder amass assetfinder findomain sublist3r waybackurls; do
     if command_available "$tool"; then printf '[+] %s available\n' "$tool"; else printf '[!] %s not installed\n' "$tool"; fi
   done
 }
@@ -74,19 +82,19 @@ source_subfinder() { subfinder -d "$1" -silent; }
 source_amass() { amass enum -passive -d "$1"; }
 source_assetfinder() { assetfinder --subs-only "$1"; }
 source_findomain() { findomain -t "$1" -q; }
-source_gau() { gau "$1" | sed -n 's#^[a-zA-Z][a-zA-Z0-9+.-]*://\([^/?#:]*\).*#\1#p'; }
+source_sublist3r() { sublist3r -d "$1" -o /dev/stdout; }
 source_waybackurls() { waybackurls "$1" | sed -n 's#^[a-zA-Z][a-zA-Z0-9+.-]*://\([^/?#:]*\).*#\1#p'; }
-source_waymore() { waymore -i "$1" -mode U -oU /dev/stdout 2>/dev/null | sed -n 's#^[a-zA-Z][a-zA-Z0-9+.-]*://\([^/?#:]*\).*#\1#p'; }
 source_crtsh() { curl -fsSL --max-time "$TIMEOUT" "https://crt.sh/?q=%25.${1}&output=json" | grep -o '"name_value":"[^"]*"' | cut -d'"' -f4; }
 source_certspotter() { curl -fsSL --max-time "$TIMEOUT" "https://api.certspotter.com/v1/issuances?domain=${1}&include_subdomains=true&expand=dns_names" | grep -oE '"[A-Za-z0-9*_.-]+\.[A-Za-z0-9_.-]+"' | tr -d '"'; }
 source_hackertarget() { curl -fsSL --max-time "$TIMEOUT" "https://api.hackertarget.com/hostsearch/?q=${1}" | cut -d, -f1; }
 
 source_label() {
   case $1 in
-    subfinder) printf 'Subfinder' ;; amass) printf 'Amass' ;;
+    subfinder) printf 'Subfinder' ;;
+    amass) printf 'Amass' ;;
     assetfinder) printf 'Assetfinder' ;; findomain) printf 'Findomain' ;;
-    gau) printf 'GAU' ;; waybackurls) printf 'WaybackURLs' ;;
-    waymore) printf 'Waymore' ;; crtsh) printf 'crt.sh' ;;
+    sublist3r) printf 'Sublist3r' ;;
+    waybackurls) printf 'WaybackURLs' ;; crtsh) printf 'crt.sh' ;;
     certspotter) printf 'CertSpotter' ;; hackertarget) printf 'HackerTarget' ;;
     *) printf '%s' "$1" ;;
   esac
@@ -137,9 +145,8 @@ enumerate_domain() {
   queue_source amass "$domain" "$target" amass
   queue_source assetfinder "$domain" "$target" assetfinder
   queue_source findomain "$domain" "$target" findomain
-  queue_source gau "$domain" "$target" gau
+  queue_source sublist3r "$domain" "$target" sublist3r
   queue_source waybackurls "$domain" "$target" waybackurls
-  queue_source waymore "$domain" "$target" waymore
   queue_source crtsh "$domain" "$target" curl
   queue_source certspotter "$domain" "$target" curl
   queue_source hackertarget "$domain" "$target" curl
@@ -192,6 +199,7 @@ write_output() {
     printf 'Cannot write output file: %s\n' "$output" >&2
     return 1
   fi
+  printf 'Created by navaf\n' >&2
 }
 
 DOMAIN="" LIST=""

@@ -15,9 +15,8 @@ ReconSub automatically uses any of these optional tools that are installed:
 - `amass`
 - `assetfinder`
 - `findomain`
-- `gau`
+- `sublist3r`
 - `waybackurls`
-- `waymore`
 
 Check availability with:
 
