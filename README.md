@@ -1,5 +1,7 @@
 # ReconSubs
 
+<img width="965" height="524" alt="Screenshot From 2026-10-29 01-45-42" src="https://github.com/user-attachments/assets/6a8f156a-a646-46ab-9d16-c523d523a308" />
+
 A small Bash tool for collecting passive subdomain results from locally installed tools and public, no-key sources. It validates that hostnames belong to the requested target, normalizes them, and writes one deduplicated text file.
 
 Use it only on domains you own or are authorized to assess.
