@@ -1,4 +1,4 @@
-# ReconSub
+# ReconSubs
 
 A small Bash tool for collecting passive subdomain results from locally installed tools and public, no-key sources. It validates that hostnames belong to the requested target, normalizes them, and writes one deduplicated text file.
 
@@ -25,6 +25,11 @@ Check availability with:
 ```
 
 ## Usage
+
+Download
+```bash
+git clone https://github.com/navaf-pt/Recon-Subs.git
+```
 
 Make the script executable once:
 
@@ -82,4 +87,3 @@ Temporary files are removed on normal exit or interruption. No API keys, probing
     --version          Show version
 -h, --help             Show help
 ```
-# Subs-Recon
