@@ -5,7 +5,7 @@ set -u
 
 VERSION="1.0.0"
 OUTFILE=""
-TIMEOUT=60
+TIMEOUT=300
 QUIET=0
 VERBOSE=0
 TMPDIRS=()
@@ -19,7 +19,7 @@ Collect, validate, and deduplicate subdomains into one text file.
   -d, --domain DOMAIN    One domain
   -l, --list FILE        File containing one domain per line
   -o, --output FILE      Final text file (default: subdomains.txt)
-      --timeout NUM      Per-source timeout in seconds (default: 60)
+      --timeout NUM      Per-source timeout in seconds (default: 300)
       --check            Show available local tools
       --quiet            Suppress progress messages
       --verbose          Show failed source details
@@ -72,7 +72,7 @@ valid_target() { [[ $1 =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9](
 
 check_tools() {
   local tool
-  for tool in subfinder amass assetfinder findomain sublist3r waybackurls; do
+  for tool in subfinder amass assetfinder findomain sublist3r; do
     if command_available "$tool"; then printf '[+] %s available\n' "$tool"; else printf '[!] %s not installed\n' "$tool"; fi
   done
 }
@@ -82,8 +82,30 @@ source_subfinder() { subfinder -d "$1" -silent; }
 source_amass() { amass enum -passive -d "$1"; }
 source_assetfinder() { assetfinder --subs-only "$1"; }
 source_findomain() { findomain -t "$1" -q; }
-source_sublist3r() { sublist3r -d "$1" -o /dev/stdout; }
-source_waybackurls() { waybackurls "$1" | sed -n 's#^[a-zA-Z][a-zA-Z0-9+.-]*://\([^/?#:]*\).*#\1#p'; }
+source_sublist3r() {
+  python3 -c '
+import multiprocessing
+multiprocessing.set_start_method("fork", force=True)
+import sys
+import sublist3r
+for subdomain in sublist3r.main(sys.argv[1], 40, None, False, True, False, False, None):
+    print(subdomain)
+' "$1"
+}
+source_waybackmachine() {
+  curl -fsSL --max-time "$TIMEOUT" -A "ReconSub/1.0" \
+    "https://web.archive.org/cdx/search/cdx?url=*.$1/*&output=txt&fl=original&collapse=urlkey&filter=statuscode:200" |
+  python3 -c '
+import sys
+from urllib.parse import urlsplit
+for line in sys.stdin:
+    url = line.strip()
+    if url:
+        host = urlsplit(url).hostname if "://" in url else url.split("/", 1)[0].split(":", 1)[0]
+        if host:
+            print(host.lower())
+'
+}
 source_crtsh() { curl -fsSL --max-time "$TIMEOUT" "https://crt.sh/?q=%25.${1}&output=json" | grep -o '"name_value":"[^"]*"' | cut -d'"' -f4; }
 source_certspotter() { curl -fsSL --max-time "$TIMEOUT" "https://api.certspotter.com/v1/issuances?domain=${1}&include_subdomains=true&expand=dns_names" | grep -oE '"[A-Za-z0-9*_.-]+\.[A-Za-z0-9_.-]+"' | tr -d '"'; }
 source_hackertarget() { curl -fsSL --max-time "$TIMEOUT" "https://api.hackertarget.com/hostsearch/?q=${1}" | cut -d, -f1; }
@@ -94,7 +116,7 @@ source_label() {
     amass) printf 'Amass' ;;
     assetfinder) printf 'Assetfinder' ;; findomain) printf 'Findomain' ;;
     sublist3r) printf 'Sublist3r' ;;
-    waybackurls) printf 'WaybackURLs' ;; crtsh) printf 'crt.sh' ;;
+    waybackmachine) printf 'Wayback Machine' ;; crtsh) printf 'crt.sh' ;;
     certspotter) printf 'CertSpotter' ;; hackertarget) printf 'HackerTarget' ;;
     *) printf '%s' "$1" ;;
   esac
@@ -107,19 +129,27 @@ run_source() {
     printf '%s\tskipped\n' "$source" >>"$status"
     return
   fi
-  if timeout "$TIMEOUT" bash -c 'eval "$1"; TIMEOUT=$2 "$3" "$4"' bash \
-      "$(declare -f "source_$source")" "$TIMEOUT" "source_$source" "$domain" >"$file" 2>"$file.err"; then
+  if TIMEOUT="$TIMEOUT" timeout --signal=TERM --kill-after=5s "$TIMEOUT" bash -c 'eval "$1"; "$2" "$3"' bash \
+      "$(declare -f "source_$source")" "source_$source" "$domain" >"$file" 2>"$file.err"; then
     log "[✓] $(printf '%-15s' "$(source_label "$source")") → $(wc -l <"$file")"
     printf '%s\tsuccess\n' "$source" >>"$status"
   else
     exit_code=$?
-    if (( exit_code == 124 )); then
-      log "[!] $source timed out after ${TIMEOUT}s (try --timeout 120)"
+    # Preserve useful partial results produced before a slow source timed out.
+    if (( exit_code == 124 || exit_code == 137 )) && [[ -s $file ]]; then
+      log "[✓] $(printf '%-15s' "$(source_label "$source")") → $(wc -l <"$file") (partial)"
+      printf '%s\tsuccess\n' "$source" >>"$status"
     else
-      log "[!] $source failed (use --verbose for details)"
+      if (( VERBOSE )); then
+        if (( exit_code == 124 || exit_code == 137 )); then
+          log "[!] $(source_label "$source") timed out after ${TIMEOUT}s"
+        else
+          log "[!] $(source_label "$source") failed"
+        fi
+        sed 's/^/    /' "$file.err" >&2
+      fi
+      printf '%s\tfailed\n' "$source" >>"$status"
     fi
-    (( VERBOSE )) && sed 's/^/    /' "$file.err" >&2
-    printf '%s\tfailed\n' "$source" >>"$status"
   fi
   rm -f -- "$file.err"
 }
@@ -146,7 +176,7 @@ enumerate_domain() {
   queue_source assetfinder "$domain" "$target" assetfinder
   queue_source findomain "$domain" "$target" findomain
   queue_source sublist3r "$domain" "$target" sublist3r
-  queue_source waybackurls "$domain" "$target" waybackurls
+  queue_source waybackmachine "$domain" "$target" curl
   queue_source crtsh "$domain" "$target" curl
   queue_source certspotter "$domain" "$target" curl
   queue_source hackertarget "$domain" "$target" curl
@@ -199,7 +229,6 @@ write_output() {
     printf 'Cannot write output file: %s\n' "$output" >&2
     return 1
   fi
-  printf 'Created by navaf\n' >&2
 }
 
 DOMAIN="" LIST=""

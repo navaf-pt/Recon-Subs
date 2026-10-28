@@ -16,7 +16,8 @@ ReconSub automatically uses any of these optional tools that are installed:
 - `assetfinder`
 - `findomain`
 - `sublist3r`
-- `waybackurls`
+
+Wayback Machine results are collected directly through its public CDX API and require no additional tool.
 
 Check availability with:
 
